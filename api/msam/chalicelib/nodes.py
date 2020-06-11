@@ -129,6 +129,9 @@ def cloudfront_distribution_ddb_items():
     for item in cloudfront_distributions():
         arn = item["ARN"]
         service = "cloudfront-distribution"
+        item['idle_state'] = bool(False)
+        if 'Status' in item:
+            item['idle_state'] = bool(item['Status'] != 'Deployed')
         items.append(node_to_ddb_item(arn, service, "global", item))
     return items
 
@@ -141,6 +144,9 @@ def medialive_channel_ddb_items(region):
     for channel in medialive_channels(region):
         arn = channel["Arn"]
         service = "medialive-channel"
+        channel['idle_state'] = bool(False)
+        if 'State' in channel:
+            channel['idle_state'] = bool(channel['State'] != 'RUNNING')
         items.append(node_to_ddb_item(arn, service, region, channel))
     return items
 
@@ -153,6 +159,9 @@ def medialive_input_ddb_items(region):
     for ml_input in medialive_inputs(region):
         arn = ml_input["Arn"]
         service = "medialive-input"
+        ml_input['idle_state'] = bool(False)
+        if 'State' in ml_input:
+            ml_input['idle_state'] = bool(ml_input['State'] != 'ATTACHED')
         items.append(node_to_ddb_item(arn, service, region, ml_input))
     return items
 
@@ -165,6 +174,9 @@ def medialive_multiplex_ddb_items(region):
     for multiplex in medialive_multiplexes(region):
         arn = multiplex["Arn"]
         service = "medialive-multiplex"
+        multiplex['idle_state'] = bool(False)
+        if 'State' in multiplex:
+            multiplex['idle_state'] = bool(multiplex['State'] != 'RUNNING')
         items.append(node_to_ddb_item(arn, service, region, multiplex))
     return items
 
@@ -238,6 +250,9 @@ def mediaconnect_flow_ddb_items(region):
     for mc_flow in mediaconnect_flows(region):
         arn = mc_flow["FlowArn"]
         service = "mediaconnect-flow"
+        mc_flow['idle_state'] = bool(False)
+        if 'Status' in mc_flow:
+            mc_flow['idle_state'] = bool(mc_flow['Status'] != 'ACTIVE')
         items.append(node_to_ddb_item(arn, service, region, mc_flow))
     return items
 
@@ -275,6 +290,9 @@ def ec2_instance_ddb_items(region):
     for ec2_instance in ec2_instances(region):
         arn = "arn:aws:ec2-instance:" + region + "::" + ec2_instance['InstanceId']
         service = "ec2-instance"
+        ec2_instance['idle_state'] = bool(False)
+        if 'State' in ec2_instance and 'Name' in ec2_instance['State']:
+            ec2_instance['idle_state'] = bool(ec2_instance['State']['Name'] != 'running')
         items.append(node_to_ddb_item(arn, service, region, ec2_instance))
     return items
 

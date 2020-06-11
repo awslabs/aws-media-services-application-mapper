@@ -18,38 +18,19 @@ define(["app/server", "app/connections", "app/settings"],
 
         // interval in millis to update the cache
 
-        var update_interval;
-
         var intervalID;
-
+        var update_interval;
         var settings_key = "app-event-update-interval";
 
-        // or does this have to be union of eml and emx sets??
-        var retrieve_for_state = function(state) {
+        var retrieve_for_state_source = function(state, source = "aws.medialive") {
             var current_connection = connections.get_current();
             var url = current_connection[0];
             var api_key = current_connection[1];
             var current_endpoint = `${url}/cloudwatch/events/state/${state}/groups`;
 
-            return new Promise(function(resolve, reject) {
-                server.get(current_endpoint, api_key)
-                    .then(resolve)
-                    .catch(function(error) {
-                        console.log(error);
-                        reject(error);
-                    });
-            });
-        };
+            if (source !== "aws.medialive")
+                current_endpoint = `${url}/cloudwatch/events/state/${state}/${source}`;
 
-        var retrieve_for_state_source = function(state, source) {
-            var current_connection = connections.get_current();
-            var url = current_connection[0];
-            var api_key = current_connection[1];
-            if (source == "aws.medialive") {
-                var current_endpoint = `${url}/cloudwatch/events/state/${state}/groups`;
-            } else {
-                var current_endpoint = `${url}/cloudwatch/events/state/${state}/${source}`;
-            }
             return new Promise(function(resolve, reject) {
                 server.get(current_endpoint, api_key)
                     .then(resolve)
@@ -61,24 +42,37 @@ define(["app/server", "app/connections", "app/settings"],
         };
 
         var cache_update = function() {
-            retrieve_for_state("set").then(function(res) {
-                // console.log("updated set event cache");
+            retrieve_for_state_source("set").then(function(res) {
+                if (res.state_changes && res.state_changes.length)
+                    console.log("STATE CHANGE ALARMS => %o", res.state_changes);
+                    
+                var incoming_alerts = res.degraded.concat(res.down).concat(res.running).concat(res.state_changes);
+
+                if (!incoming_alerts.length && !current_set_events.length)
+                    return;
+
                 previous_set_events = current_set_events;
-                current_set_events = res.degraded.concat(res.down).concat(res.running);
+                current_set_events = incoming_alerts;
+
                 previous_medialive_events = _.filter(previous_set_events, function(i) {
-                    return (i.source == "aws.medialive");
+                    return (i && i.source == "aws.medialive");
                 });
+
                 current_medialive_events = _.filter(current_set_events, function(i) {
-                    return (i.source == "aws.medialive");
+                    return (i && i.source == "aws.medialive");
                 });
+
                 previous_mediaconnect_events = _.filter(previous_set_events, function(i) {
-                    return (i.source == "aws.mediaconnect");
+                    return (i && i.source == "aws.mediaconnect");
                 });
+
                 current_mediaconnect_events = _.filter(current_set_events, function(i) {
-                    return (i.source == "aws.mediaconnect");
+                    return (i && i.source == "aws.mediaconnect");
                 });
+
                 var added = _.differenceBy(current_set_events, previous_set_events, "alarm_id");
                 var removed = _.differenceBy(previous_set_events, current_set_events, "alarm_id");
+                
                 if (added.length || removed.length) {
                     for (let f of listeners) {
                         f(current_set_events, previous_set_events);

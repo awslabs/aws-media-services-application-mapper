@@ -220,7 +220,7 @@ define(["jquery", "lodash", "app/model", "app/events", "app/cloudwatch_events", 
 
             // event alerts
             for (let event_value of event_alerts.get_cached_events().current) {
-                if (event_value.resource_arn == node.id) {
+                if (event_value && event_value.resource_arn == node.id) {
                     event_value.detail.name = node.name;
                     event_value.detail.resource_arn = event_value.resource_arn;
                     data.push(event_value.detail);

@@ -28,13 +28,24 @@ define(["jquery", "lodash", "app/events", "app/alarms", "app/ui/overlays/overlay
         };
 
         var decorate_alerts = function(drawing, font_size, width, height, id) {
-            var alert_count = 0;
-            for (let item of alert_events.get_cached_events().current_mediaconnect) {
-                if (item.resource_arn == id) {
-                    alert_count += 1;
+            let alert_count = 0;
+            const cached_events = alert_events.get_cached_events();
+
+            /** 
+             * Originally, `cached_events` would only have `{current [], previous: []}`.
+             * Now we are checking for `current_mediaconnect` which is not defined in the `cached_events`
+             * object. Therefore, we validate its presence and only defined, run the following block
+             * of code.
+             * This way we dont break the preexisting logic.
+             */
+            if (_.has(cached_events, 'current_mediaconnect')) {
+                for (let item of cached_events.current_mediaconnect) {
+                    if (item.resource_arn == id) {
+                        alert_count += 1; 
+                    }
                 }
+                tools.set_event_text(alert_count, drawing, font_size, width, "Alerts");
             }
-            tools.set_event_text(alert_count, drawing, font_size, width, "Alerts");
         };
 
         var decorate = function(drawing, font_size, width, height, id) {

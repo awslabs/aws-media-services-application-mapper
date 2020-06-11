@@ -172,6 +172,22 @@ def delete_cached_data(arn):
     return cache.delete_cached_data(arn)
 
 
+@app.route('/cached/state', cors=True, api_key_required=True, methods=['GET'])
+def cached_by_state_groups():
+    """
+    API entry point to return all the current content by state groups.
+    """
+    return cache.cached_by_state_groups()
+
+
+@app.route('/cached/state/{state}', cors=True, api_key_required=True, methods=['GET'])
+def cached_by_state(state):
+    """
+    API entry point to return all the current content with the given state.
+    """
+    return cache.cached_by_state(state)
+
+
 @app.route('/regions', cors=True, api_key_required=True, methods=['GET'])
 def regions():
     """

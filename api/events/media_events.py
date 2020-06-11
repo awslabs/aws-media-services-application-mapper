@@ -22,7 +22,7 @@ from jsonpath_ng import parse
 STAMP = os.environ["BUILD_STAMP"]
 MSAM_BOTO3_CONFIG = Config(user_agent="aws-media-services-applications-mapper/{stamp}/media_events.py".format(stamp=STAMP))
 
-DYNAMO_REGION_NAME=os.environ["EVENTS_TABLE_REGION"]
+DYNAMO_REGION_NAME = os.environ["EVENTS_TABLE_REGION"]
 DYNAMO_RESOURCE = boto3.resource('dynamodb', region_name=DYNAMO_REGION_NAME, config=MSAM_BOTO3_CONFIG)
 EVENTS_TABLE = DYNAMO_RESOURCE.Table(os.environ["EVENTS_TABLE_NAME"])
 CLOUDWATCH_EVENTS_TABLE = DYNAMO_RESOURCE.Table(os.environ["CLOUDWATCH_EVENTS_TABLE_NAME"])
@@ -65,7 +65,10 @@ def lambda_handler(event, _):
                 event["alarm_id"] = event["detail"]["alarm_id"]
                 event["alarm_state"] = event["detail"]["alarm_state"].lower()
                 event["detail"]["pipeline_state"] = get_pipeline_state(event)
-
+                # maintain state
+                current_state = get_current_state(event)
+                for prop in current_state:
+                    event["detail"][prop] = current_state[prop]
             # mediaconnect alerts
             elif "MediaConnect" in event["detail-type"]:
                 event["alarm_id"] = event["detail"]["error-id"]
@@ -133,24 +136,100 @@ def get_pipeline_state(event):
     """
     Check for pipeline state only if source is aws.medialive
     """
+    arn = event["resource_arn"]
     running_pipeline = bool(True)
-    resource_arn = event["resource_arn"]
     try:
-        if event["source"] == "aws.medialive" and event["detail"]["alarm_state"] == "SET":
-            resource = boto3.resource('dynamodb', region_name=DYNAMO_REGION_NAME)
-            CONTENT_TABLE = resource.Table(CONTENT_TABLE_NAME)
-            response = CONTENT_TABLE.query(KeyConditionExpression=Key('arn').eq(resource_arn))
-            if "Items" in response:
-                item = response["Items"][0]
+        if event["source"] == "aws.medialive":
+            if "alarm_state" in event["detail"] and event["detail"]["alarm_state"] == "SET":
+                item = get_content_record(arn)
                 if "service" in item and item["service"] == "medialive-multiplex":
                     running_pipeline = bool(False)
                 else:
                     data = json.loads(item["data"])
                     if "ChannelClass" in data and data["ChannelClass"] == "STANDARD":
                         running_pipeline = bool(False)
+            elif "state" in event["detail"] and event["detail"]["state"] == "STOPPING":
+                running_pipeline = bool(False)
     except ClientError as error:
         print(error)
     if "pipeline" in event["detail"]:
         log_msg = 'Pipeline {} state to for {} is {}'
-        print(log_msg.format(event["detail"]["pipeline"], resource_arn, running_pipeline))
+        print(log_msg.format(event["detail"]["pipeline"], arn, running_pipeline))
     return running_pipeline
+
+
+def get_current_state(event):
+    """
+    Retrieve state and update according to current event. 
+    Flag the details if stopping or stopped
+    """
+    current_state = {}
+    try:
+        if event["source"] == "aws.medialive":
+            new_state = str("N/A")
+            old_state = str("N/A")
+            current_state["idle"] = bool(False)
+            item = get_content_record(event["resource_arn"])
+            data = json.loads(item["data"])
+            if "State" in data:
+                old_state = data["State"]
+            if "state" in event["detail"]:
+                new_state = event["detail"]["state"]
+            elif "alarm_state" in event["detail"]:
+                new_state = event["detail"]["alarm_state"]
+
+            print("Incoming event state => " + new_state)
+            print("Old event state => " + old_state)
+            
+            # update the idle state
+            if new_state is not None:
+                if not data["idle_state"]:
+                    data["idle_state"] = bool(new_state == "STOPPED")
+                elif data["idle_state"]:
+                    data["idle_state"] = bool(new_state == "STARTING" or new_state == "RUNNING")
+                current_state["idle_state"] = data["idle_state"]
+
+            # update the State
+            if old_state is not None:
+                if new_state != old_state:
+                    data["State"] = new_state
+                current_state["State"] = data["State"]
+            if old_state != "STOPPED":
+                current_state["idle"] = bool(new_state == "STOPPED")
+            else:
+                current_state["idle"] = bool(new_state == "STARTING" or new_state == "RUNNING")
+            item["data"] = json.dumps(data)
+            # update the content record with the new current_state
+            update_content_record(item)
+    except ClientError as error:
+        print(error)
+    return current_state
+
+
+def get_content_record(arn):
+    """
+    Get the content record from dynamo, given the arn
+    """
+    record = None
+    try:
+        resource = boto3.resource('dynamodb', region_name=DYNAMO_REGION_NAME)
+        CONTENT_TABLE = resource.Table(CONTENT_TABLE_NAME)
+        response = CONTENT_TABLE.query(KeyConditionExpression=Key('arn').eq(arn))
+        if "Items" in response:
+            record = response["Items"][0]
+    except ClientError as error:
+        print(error)
+    return record
+
+
+def update_content_record(item):
+    """
+    Update the content record to dynamo, given the arn
+    """
+    try:
+        resource = boto3.resource('dynamodb', region_name=DYNAMO_REGION_NAME)
+        CONTENT_TABLE = resource.Table(CONTENT_TABLE_NAME)
+        CONTENT_TABLE.put_item(Item=item)
+        print("Updated content record for " + item["arn"])
+    except ClientError as error:
+        print(error)

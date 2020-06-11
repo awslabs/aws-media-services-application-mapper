@@ -2,7 +2,6 @@
        SPDX-License-Identifier: Apache-2.0 */
 
 define(["jquery", "lodash", "app/window", "app/ui/util", "app/plugins"], function($, _, window, ui_util, plugins) {
-
     const max_line_length = 25;
     const font_family = 'Arial';
     const work_div_id = ui_util.makeid();
@@ -11,6 +10,7 @@ define(["jquery", "lodash", "app/window", "app/ui/util", "app/plugins"], functio
     const border_rgb = "#a6a6a6";
     const selected_border_rgb = "#262626";
     const degraded_rgb = "#ffff33";
+    const idle_rgb = "#949898";
 
     const wordWrap = (str, max) => str.length > max ? [`${str.substring(0, max - 1)} [...]`] : [str];
 
@@ -73,7 +73,7 @@ define(["jquery", "lodash", "app/window", "app/ui/util", "app/plugins"], functio
         return 'data:image/svg+xml;base64,' + window.btoa(modified);
     };
 
-    // add the hidden SVG rendering div to the end of the body
+    /** add the hidden SVG rendering div to the end of the body */
     $("body").append(work_div_html);
 
     return {
@@ -81,6 +81,7 @@ define(["jquery", "lodash", "app/window", "app/ui/util", "app/plugins"], functio
             create(type_name, node_name, node_rgb, true, id, data),
         unselected: (type_name, node_name, node_rgb, id, data) =>
             create(type_name, node_name, node_rgb, false, id, data),
-        getDegradedRgb: () => degraded_rgb
+        getIdleRgb: () => idle_rgb,
+        getDegradedRgb: () => degraded_rgb,
     };
 });
